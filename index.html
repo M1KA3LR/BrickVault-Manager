@@ -48,6 +48,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:12px}
 <button class="active" data-tab="dashboard">Tableau de bord</button>
 <button data-tab="projects">Projets</button>
 <button data-tab="sync">Synchronisation</button>
+<button data-tab="catalog">Catalogue</button>
 <button data-tab="history">Historique</button>
 </nav>
 
@@ -104,16 +105,18 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:12px}
  </div>
  <div class="card" id="deductionsCard" hidden>
   <h2>4. Détail des pièces déduites</h2>
-  <p class="muted">Les noms peuvent être complétés ou corrigés avant l'export Excel. Ils ne sont pas toujours présents dans les XML BrickLink.</p>
+  <p class="muted">Les noms sont recherchés dans le catalogue local et peuvent être corrigés avant l’export Excel.</p>
   <div class="table-wrap"><table><thead><tr><th>Design ID</th><th>Nom de la pièce</th><th>Nom de la couleur</th><th>Qté déduite</th></tr></thead><tbody id="deductionRows"></tbody></table></div>
  </div>
 </section>
 
+<section id="catalog" class="panel"><div class="card"><h2>Catalogue BrickLink local</h2><p class="muted">Importe les fichiers tabulés téléchargés sur BrickLink, même si leur extension est .xml. Ils restent sur cet appareil.</p><label for="catParts">Parts</label><input type="file" id="catParts"><label for="catColors">Colors</label><input type="file" id="catColors"><label for="catCodes">Part and Color Codes (facultatif)</label><input type="file" id="catCodes"><div class="actions"><button class="primary" id="importCatalog">Importer / mettre à jour</button></div><div class="status" id="catalogStatus" role="status">Chargement…</div></div></section>
 <section id="history" class="panel">
  <div class="card"><h2>Historique des synchronisations</h2><div id="historyList" class="muted">Aucune opération enregistrée.</div><div class="actions"><button class="danger" id="clearHistory">Effacer l'historique</button></div></div>
 </section>
-<footer>BrickVault Manager · Les fichiers sont traités localement sur ton appareil.</footer>
+<footer>BrickVault Manager V2 · Les fichiers sont traités localement sur ton appareil.</footer>
 </main>
+<script src="catalog.js"></script>
 <script>
 const STORE='brickvault-manager-v1';
 let state=loadState(), currentResult=null;
@@ -150,7 +153,7 @@ function fileText(file){return new Promise((resolve,reject)=>{const r=new FileRe
 document.getElementById('runSync').onclick=async()=>{
  const wf=document.getElementById('wantedFile').files[0],cf=document.getElementById('collectionFile').files[0],pid=document.getElementById('syncProject').value;
  if(!pid)return status('Crée ou sélectionne d’abord un projet.','warn');if(!wf||!cf)return status('Sélectionne les deux fichiers XML.','warn');
- try{status('Lecture et comparaison des fichiers…');const [wt,ct]=await Promise.all([fileText(wf),fileText(cf)]);const wd=parseXml(wt,'Wanted List'),cd=parseXml(ct,'My Collection');if(!getItems(wd).length)throw Error('Aucun élément ITEM trouvé dans la Wanted List.');if(!getItems(cd).length)throw Error('Aucun élément ITEM trouvé dans My Collection.');const result=runCalculation(wd,cd);result.project=state.projects.find(p=>p.id===pid).name;result.xml=new XMLSerializer().serializeToString(wd);result.date=new Date().toLocaleString('fr-FR');currentResult=result;
+ try{status('Lecture et comparaison des fichiers…');const [wt,ct]=await Promise.all([fileText(wf),fileText(cf)]);const wd=parseXml(wt,'Wanted List'),cd=parseXml(ct,'My Collection');if(!getItems(wd).length)throw Error('Aucun élément ITEM trouvé dans la Wanted List.');if(!getItems(cd).length)throw Error('Aucun élément ITEM trouvé dans My Collection.');const result=runCalculation(wd,cd);await catalogReady;enrichNames(result.deductions,catalog);result.project=state.projects.find(p=>p.id===pid).name;result.xml=new XMLSerializer().serializeToString(wd);result.date=new Date().toLocaleString('fr-FR');currentResult=result;
   showResult(result);const refs=result.deductions.length,qty=result.deductions.reduce((a,x)=>a+x.qty,0);state.history.unshift({project:result.project,date:result.date,refs,qty,remaining:result.remainingRows});state.history=state.history.slice(0,100);save();status('Synchronisation terminée. Les fichiers originaux n’ont pas été modifiés.','ok');
  }catch(e){status(e.message||'Erreur pendant la synchronisation.','err')}
 };
